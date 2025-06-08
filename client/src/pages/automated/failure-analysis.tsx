@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners, PointerSensor, useSensor, useSensors, useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -139,9 +139,19 @@ interface DroppableColumnProps {
 
 function DroppableColumn({ column, items, onItemClick }: DroppableColumnProps) {
   const IconComponent = column.icon;
+  const { isOver, setNodeRef } = useDroppable({
+    id: column.id,
+  });
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 min-h-[600px] w-80">
+    <div 
+      ref={setNodeRef}
+      role="region"
+      aria-label={`Droppable area for ${column.title}`}
+      className={`bg-gray-50 dark:bg-gray-900 rounded-lg p-4 min-h-[600px] w-80 border-2 border-dashed transition-colors ${
+        isOver ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20' : 'border-gray-200 dark:border-gray-700'
+      }`}
+    >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <div className={`w-3 h-3 rounded-full ${column.color}`} />
@@ -158,14 +168,16 @@ function DroppableColumn({ column, items, onItemClick }: DroppableColumnProps) {
 
       <ScrollArea className="h-[500px]">
         <SortableContext items={items.map(item => `${item.testCase.id}`)} strategy={verticalListSortingStrategy}>
-          {items.map((item) => (
-            <KanbanItem
-              key={item.testCase.id}
-              testCase={item.testCase}
-              analysis={item.analysis}
-              onClick={() => onItemClick(item.testCase)}
-            />
-          ))}
+          <div className="space-y-3">
+            {items.map((item) => (
+              <KanbanItem
+                key={item.testCase.id}
+                testCase={item.testCase}
+                analysis={item.analysis}
+                onClick={() => onItemClick(item.testCase)}
+              />
+            ))}
+          </div>
         </SortableContext>
         
         {items.length === 0 && (
@@ -174,6 +186,7 @@ function DroppableColumn({ column, items, onItemClick }: DroppableColumnProps) {
               <IconComponent className="h-6 w-6" />
             </div>
             <p className="text-sm">No items in {column.title.toLowerCase()}</p>
+            <p className="text-xs mt-1">Drag tests here to update status</p>
           </div>
         )}
       </ScrollArea>

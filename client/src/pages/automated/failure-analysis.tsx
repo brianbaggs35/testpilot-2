@@ -146,6 +146,8 @@ function DroppableColumn({ column, items, onItemClick }: DroppableColumnProps) {
   return (
     <div 
       ref={setNodeRef}
+      role="region"
+      aria-label={`Droppable area for ${column.title}`}
       className={`bg-gray-50 dark:bg-gray-900 rounded-lg p-4 min-h-[600px] w-80 border-2 border-dashed transition-colors ${
         isOver ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20' : 'border-gray-200 dark:border-gray-700'
       }`}

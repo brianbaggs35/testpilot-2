@@ -1,273 +1,393 @@
 import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { KanbanBoard, KanbanItem } from "@/components/kanban/kanban-board";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
-import { Plus, Play, Users, Calendar, Eye, Edit, Check, X, Clock } from "lucide-react";
-import { insertManualTestRunSchema, type InsertManualTestRun, type ManualTestRun, type ManualTestCase, type ManualTestExecution } from "@shared/schema";
-import { apiRequest } from "@/lib/queryClient";
+import { 
+  ManualTestRun, 
+  ManualTestCase, 
+  ManualTestExecution,
+  insertManualTestRunSchema,
+  insertManualTestExecutionSchema 
+} from "@shared/schema";
+import { 
+  Play, 
+  Plus, 
+  Import, 
+  CheckCircle, 
+  XCircle, 
+  Clock, 
+  AlertTriangle,
+  GripVertical,
+  Eye,
+  Edit,
+  MoreVertical,
+  Users,
+  Calendar
+} from "lucide-react";
 import { z } from "zod";
 
-const formSchema = insertManualTestRunSchema;
-type FormData = z.infer<typeof formSchema>;
+const createTestRunSchema = insertManualTestRunSchema;
+type CreateTestRunForm = z.infer<typeof createTestRunSchema>;
 
-export default function ManualTestRuns() {
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+const statusColumns = [
+  { id: 'pending', title: 'Pending', status: 'pending', color: 'bg-gray-500', icon: Clock },
+  { id: 'passed', title: 'Passed', status: 'passed', color: 'bg-green-500', icon: CheckCircle },
+  { id: 'failed', title: 'Failed', status: 'failed', color: 'bg-red-500', icon: XCircle },
+  { id: 'blocked', title: 'Blocked', status: 'blocked', color: 'bg-yellow-500', icon: AlertTriangle },
+];
+
+interface KanbanItemProps {
+  execution: ManualTestExecution;
+  testCase: ManualTestCase;
+  onClick: () => void;
+}
+
+function KanbanItem({ execution, testCase, onClick }: KanbanItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: `${execution.id}` });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  const getStatusInfo = () => {
+    return statusColumns.find(s => s.value === execution.status) || statusColumns[0];
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-3 shadow-sm hover:shadow-md transition-all cursor-pointer ${
+        isDragging ? 'opacity-50 rotate-2 scale-105' : ''
+      }`}
+      onClick={onClick}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex-1 min-w-0">
+          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+            {testCase.title}
+          </h4>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            {testCase.category || 'No category'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 ml-2">
+          <div
+            {...attributes}
+            {...listeners}
+            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-grab active:cursor-grabbing"
+          >
+            <GripVertical className="h-3 w-3 text-gray-400" />
+          </div>
+        </div>
+      </div>
+
+      {testCase.description && (
+        <div className="mb-3">
+          <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
+            {testCase.description}
+          </p>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-xs px-1 py-0">
+            #{testCase.id}
+          </Badge>
+          <Badge variant="outline" className={`text-xs px-1 py-0`}>
+            {testCase.priority}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-1">
+          <Eye className="h-3 w-3" />
+          <span>View</span>
+        </div>
+      </div>
+
+      {execution.notes && (
+        <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-700 rounded text-xs">
+          <p className="text-gray-600 dark:text-gray-300 line-clamp-1">
+            <strong>Notes:</strong> {execution.notes}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface DroppableColumnProps {
+  column: typeof statusColumns[0];
+  executions: Array<{ execution: ManualTestExecution; testCase: ManualTestCase }>;
+  onItemClick: (execution: ManualTestExecution, testCase: ManualTestCase) => void;
+}
+
+function DroppableColumn({ column, executions, onItemClick }: DroppableColumnProps) {
+  const IconComponent = column.icon;
+
+  return (
+    <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 min-h-[600px] w-80">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className={`w-3 h-3 rounded-full ${column.color}`} />
+          <IconComponent className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+          <h3 className="font-medium text-gray-900 dark:text-gray-100">{column.title}</h3>
+          <Badge variant="secondary" className="text-xs">
+            {executions.length}
+          </Badge>
+        </div>
+        <Button variant="ghost" size="sm">
+          <MoreVertical className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <ScrollArea className="h-[500px]">
+        <SortableContext items={executions.map(item => `${item.execution.id}`)} strategy={verticalListSortingStrategy}>
+          {executions.map((item) => (
+            <KanbanItem
+              key={item.execution.id}
+              execution={item.execution}
+              testCase={item.testCase}
+              onClick={() => onItemClick(item.execution, item.testCase)}
+            />
+          ))}
+        </SortableContext>
+        
+        {executions.length === 0 && (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+              <IconComponent className="h-6 w-6" />
+            </div>
+            <p className="text-sm">No tests {column.title.toLowerCase()}</p>
+          </div>
+        )}
+      </ScrollArea>
+    </div>
+  );
+}
+
+export default function TestRuns() {
   const [selectedRun, setSelectedRun] = useState<ManualTestRun | null>(null);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const [selectedExecution, setSelectedExecution] = useState<{ execution: ManualTestExecution; testCase: ManualTestCase } | null>(null);
+  const [isCreateRunOpen, setIsCreateRunOpen] = useState(false);
+  const [isImportTestsOpen, setIsImportTestsOpen] = useState(false);
+  const [isExecutionModalOpen, setIsExecutionModalOpen] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
-  const form = useForm<FormData>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      name: "",
-      status: "not_started",
-      assignedTo: "",
-    },
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
+  const { data: testRuns = [] } = useQuery<ManualTestRun[]>({
+    queryKey: ['/api/manual-test-runs'],
   });
 
-  const { data: testRuns, isLoading: loadingRuns } = useQuery<ManualTestRun[]>({
-    queryKey: ["/api/manual-test-runs"],
+  const { data: testCases = [] } = useQuery<ManualTestCase[]>({
+    queryKey: ['/api/manual-test-cases'],
   });
 
-  const { data: testCases } = useQuery<ManualTestCase[]>({
-    queryKey: ["/api/manual-test-cases"],
-  });
-
-  const { data: executions } = useQuery<ManualTestExecution[]>({
-    queryKey: ["/api/manual-test-executions"],
+  const { data: executions = [] } = useQuery<ManualTestExecution[]>({
+    queryKey: ['/api/manual-test-executions'],
     enabled: !!selectedRun,
   });
 
   const createTestRunMutation = useMutation({
-    mutationFn: async (data: InsertManualTestRun) => {
-      const response = await apiRequest("POST", "/api/manual-test-runs", data);
-      return response.json();
+    mutationFn: async (data: CreateTestRunForm) => {
+      return apiRequest('/api/manual-test-runs', 'POST', data);
     },
     onSuccess: () => {
-      toast({
-        title: "Test Run Created",
-        description: "Manual test run has been created successfully.",
-      });
-      form.reset();
-      setIsCreateDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/manual-test-runs"] });
+      queryClient.invalidateQueries({ queryKey: ['/api/manual-test-runs'] });
+      setIsCreateRunOpen(false);
     },
-    onError: (error: any) => {
-      toast({
-        title: "Creation Failed",
-        description: error.message || "Failed to create test run.",
-        variant: "destructive",
-      });
+  });
+
+  const importTestCasesMutation = useMutation({
+    mutationFn: async (data: { testRunId: number; testCaseIds: number[] }) => {
+      const executions = data.testCaseIds.map(testCaseId => ({
+        testRunId: data.testRunId,
+        testCaseId,
+        status: 'pending' as const,
+      }));
+      
+      return Promise.all(
+        executions.map(execution => 
+          apiRequest('/api/manual-test-executions', 'POST', execution)
+        )
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/manual-test-executions'] });
+      setIsImportTestsOpen(false);
     },
   });
 
   const updateExecutionMutation = useMutation({
-    mutationFn: async ({ id, updates }: { id: number; updates: Partial<ManualTestExecution> }) => {
-      const response = await apiRequest("PATCH", `/api/manual-test-executions/${id}`, updates);
-      return response.json();
+    mutationFn: async ({ id, status, notes }: { id: number; status: string; notes?: string }) => {
+      return apiRequest(`/api/manual-test-executions/${id}`, 'PATCH', { status, notes });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/manual-test-executions"] });
-      toast({
-        title: "Status Updated",
-        description: "Test execution status has been updated.",
-      });
+      queryClient.invalidateQueries({ queryKey: ['/api/manual-test-executions'] });
     },
   });
 
-  const onSubmit = (data: FormData) => {
+  const testRunForm = useForm<CreateTestRunForm>({
+    resolver: zodResolver(createTestRunSchema),
+    defaultValues: {
+      name: '',
+      status: 'not_started',
+      assignedTo: '',
+    },
+  });
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (!over) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    // Find the column that the item was dropped on
+    const targetColumn = statusColumns.find(col => 
+      overId === col.id || overId.startsWith(col.id)
+    );
+
+    if (targetColumn) {
+      const executionId = parseInt(activeId);
+      const execution = executions.find(e => e.id === executionId);
+      
+      if (execution && execution.status !== targetColumn.status) {
+        updateExecutionMutation.mutate({
+          id: execution.id,
+          status: targetColumn.status,
+        });
+      }
+    }
+  };
+
+  const onCreateTestRun = (data: CreateTestRunForm) => {
     createTestRunMutation.mutate(data);
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "not_started":
-        return <Badge variant="secondary">Not Started</Badge>;
-      case "in_progress":
-        return <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">In Progress</Badge>;
-      case "completed":
-        return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Completed</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
+  const handleImportTests = (selectedTestCaseIds: number[]) => {
+    if (selectedRun) {
+      importTestCasesMutation.mutate({
+        testRunId: selectedRun.id,
+        testCaseIds: selectedTestCaseIds,
+      });
     }
   };
 
-  const getExecutionStatusBadge = (status: string) => {
-    switch (status) {
-      case "pending":
-        return <Badge variant="secondary">Pending</Badge>;
-      case "passed":
-        return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Passed</Badge>;
-      case "failed":
-        return <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">Failed</Badge>;
-      case "blocked":
-        return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">Blocked</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
+  const handleItemClick = (execution: ManualTestExecution, testCase: ManualTestCase) => {
+    setSelectedExecution({ execution, testCase });
+    setIsExecutionModalOpen(true);
   };
 
-  // Create kanban data for test run management
-  const createKanbanItems = (status: string): KanbanItem[] => {
-    if (!testRuns) return [];
-    
-    return testRuns
-      .filter(run => run.status === status)
-      .map(run => ({
-        id: run.id.toString(),
-        title: run.name,
-        description: `Assigned to: ${run.assignedTo || "Unassigned"}`,
-        status: run.status,
-        assignedTo: run.assignedTo || undefined,
-        onClick: () => setSelectedRun(run),
-      }));
+  const getExecutionsForColumn = (status: string) => {
+    return executions
+      .filter(execution => execution.status === status)
+      .map(execution => {
+        const testCase = testCases.find(tc => tc.id === execution.testCaseId);
+        return testCase ? { execution, testCase } : null;
+      })
+      .filter(Boolean) as Array<{ execution: ManualTestExecution; testCase: ManualTestCase }>;
   };
 
-  const kanbanColumns = [
-    {
-      title: "Not Started",
-      status: "not_started",
-      bgColor: "bg-gray-50 dark:bg-gray-950/20",
-      items: createKanbanItems("not_started"),
-    },
-    {
-      title: "In Progress",
-      status: "in_progress",
-      bgColor: "bg-blue-50 dark:bg-blue-950/20",
-      items: createKanbanItems("in_progress"),
-    },
-    {
-      title: "Completed",
-      status: "completed",
-      bgColor: "bg-green-50 dark:bg-green-950/20",
-      items: createKanbanItems("completed"),
-    },
-  ];
-
-  const calculateRunProgress = (run: ManualTestRun) => {
-    const runExecutions = executions?.filter(exec => exec.testRunId === run.id) || [];
-    const totalTests = runExecutions.length;
-    const completedTests = runExecutions.filter(exec => 
-      exec.status === "passed" || exec.status === "failed" || exec.status === "blocked"
-    ).length;
-    
-    return totalTests > 0 ? Math.round((completedTests / totalTests) * 100) : 0;
+  const getActiveItem = () => {
+    if (!activeId) return null;
+    const executionId = parseInt(activeId);
+    const execution = executions.find(e => e.id === executionId);
+    const testCase = execution ? testCases.find(tc => tc.id === execution.testCaseId) : null;
+    return execution && testCase ? { execution, testCase } : null;
   };
-
-  if (loadingRuns) {
-    return (
-      <div className="py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-          <div className="animate-pulse space-y-6">
-            <div className="h-8 bg-muted rounded w-1/3"></div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-32 bg-muted rounded"></div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="py-6">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Manual Test Runs</h1>
-            <p className="text-muted-foreground">Manage and track manual test execution</p>
-          </div>
-          
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+    <div className="p-6 max-w-full">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Test Runs</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            Manage and execute manual test runs with kanban-style tracking
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Dialog open={isCreateRunOpen} onOpenChange={setIsCreateRunOpen}>
             <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-1" />
                 New Test Run
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>Create New Test Run</DialogTitle>
+                <DialogTitle>Create Test Run</DialogTitle>
               </DialogHeader>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <Form {...testRunForm}>
+                <form onSubmit={testRunForm.handleSubmit(onCreateTestRun)} className="space-y-4">
                   <FormField
-                    control={form.control}
+                    control={testRunForm.control}
                     name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Test Run Name *</FormLabel>
+                        <FormLabel>Name</FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g., Sprint 24 - User Registration Flow" {...field} />
+                          <Input placeholder="Enter test run name" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-
                   <FormField
-                    control={form.control}
+                    control={testRunForm.control}
                     name="assignedTo"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Assigned To</FormLabel>
                         <FormControl>
-                          <Input placeholder="Enter assignee name or email" {...field} />
+                          <Input placeholder="Enter assignee name" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-
-                  <FormField
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Initial Status</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="not_started">Not Started</SelectItem>
-                            <SelectItem value="in_progress">In Progress</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="flex justify-end space-x-2">
-                    <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => setIsCreateRunOpen(false)}>
                       Cancel
                     </Button>
                     <Button type="submit" disabled={createTestRunMutation.isPending}>
-                      {createTestRunMutation.isPending ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                          Creating...
-                        </>
-                      ) : (
-                        "Create Test Run"
-                      )}
+                      Create Run
                     </Button>
                   </div>
                 </form>
@@ -275,219 +395,322 @@ export default function ManualTestRuns() {
             </DialogContent>
           </Dialog>
         </div>
+      </div>
 
-        <Tabs defaultValue="kanban" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="kanban">Kanban Board</TabsTrigger>
-            <TabsTrigger value="table">Table View</TabsTrigger>
-          </TabsList>
+      {/* Test Run Selection */}
+      <div className="mb-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Play className="h-5 w-5 text-blue-500" />
+              Select Test Run
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {testRuns.length === 0 ? (
+                <div className="col-span-full text-center py-8 text-gray-500">
+                  <Play className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p className="text-sm mb-2">No test runs created yet</p>
+                  <Button onClick={() => setIsCreateRunOpen(true)}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Create Test Run
+                  </Button>
+                </div>
+              ) : (
+                testRuns.map((run) => (
+                  <Card 
+                    key={run.id} 
+                    className={`cursor-pointer transition-all hover:shadow-md ${
+                      selectedRun?.id === run.id ? 'ring-2 ring-blue-500' : ''
+                    }`}
+                    onClick={() => setSelectedRun(run)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className="font-medium text-gray-900 dark:text-gray-100">
+                          {run.name}
+                        </h3>
+                        <Badge variant={run.status === 'completed' ? 'default' : 'secondary'}>
+                          {run.status}
+                        </Badge>
+                      </div>
+                      
+                      <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                        {run.assignedTo && (
+                          <div className="flex items-center gap-2">
+                            <Users className="h-3 w-3" />
+                            <span>{run.assignedTo}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-3 w-3" />
+                          <span>{new Date(run.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-          <TabsContent value="kanban" className="space-y-4">
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <Play className="h-4 w-4 text-blue-500" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total Runs</p>
-                      <p className="text-2xl font-bold">{testRuns?.length || 0}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+      {/* Test Execution Kanban Board */}
+      {selectedRun && (
+        <>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                {selectedRun.name} - Test Execution
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Track test case execution progress
+              </p>
+            </div>
+            <Dialog open={isImportTestsOpen} onOpenChange={setIsImportTestsOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Import className="h-4 w-4 mr-1" />
+                  Import Test Cases
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[80vh]">
+                <DialogHeader>
+                  <DialogTitle>Import Test Cases</DialogTitle>
+                </DialogHeader>
+                <ImportTestCasesModal 
+                  testCases={testCases}
+                  onImport={handleImportTests}
+                  onClose={() => setIsImportTestsOpen(false)}
+                />
+              </DialogContent>
+            </Dialog>
+          </div>
 
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-yellow-500" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">In Progress</p>
-                      <p className="text-2xl font-bold">{kanbanColumns[1].items.length}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Completed</p>
-                      <p className="text-2xl font-bold">{kanbanColumns[2].items.length}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-purple-500" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Test Cases</p>
-                      <p className="text-2xl font-bold">{testCases?.length || 0}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="flex gap-6 overflow-x-auto pb-6">
+              {statusColumns.map((column) => (
+                <DroppableColumn
+                  key={column.id}
+                  column={column}
+                  executions={getExecutionsForColumn(column.status)}
+                  onItemClick={handleItemClick}
+                />
+              ))}
             </div>
 
-            {/* Kanban Board */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Test Run Board</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <KanbanBoard columns={kanbanColumns} />
-              </CardContent>
-            </Card>
-          </TabsContent>
+            <DragOverlay>
+              {activeId ? (
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-lg rotate-2 scale-105 opacity-90">
+                  {(() => {
+                    const activeItem = getActiveItem();
+                    return activeItem ? (
+                      <KanbanItem
+                        execution={activeItem.execution}
+                        testCase={activeItem.testCase}
+                        onClick={() => {}}
+                      />
+                    ) : null;
+                  })()}
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        </>
+      )}
 
-          <TabsContent value="table" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>All Test Runs</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {!testRuns || testRuns.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No test runs found. Create your first test run to get started.
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Assigned To</TableHead>
-                        <TableHead>Progress</TableHead>
-                        <TableHead>Created</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {testRuns.map((run) => {
-                        const progress = calculateRunProgress(run);
-                        return (
-                          <TableRow key={run.id}>
-                            <TableCell className="font-medium">{run.name}</TableCell>
-                            <TableCell>{getStatusBadge(run.status)}</TableCell>
-                            <TableCell>{run.assignedTo || "Unassigned"}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <div className="w-16 bg-muted rounded-full h-2">
-                                  <div 
-                                    className="bg-primary h-2 rounded-full transition-all"
-                                    style={{ width: `${progress}%` }}
-                                  ></div>
-                                </div>
-                                <span className="text-sm text-muted-foreground">{progress}%</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>{new Date(run.createdAt).toLocaleDateString()}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-1">
-                                <Button variant="ghost" size="sm" onClick={() => setSelectedRun(run)}>
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm">
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+      {/* Test Execution Modal */}
+      {selectedExecution && (
+        <TestExecutionModal
+          execution={selectedExecution.execution}
+          testCase={selectedExecution.testCase}
+          isOpen={isExecutionModalOpen}
+          onClose={() => setIsExecutionModalOpen(false)}
+          onUpdateStatus={(status, notes) => {
+            updateExecutionMutation.mutate({
+              id: selectedExecution.execution.id,
+              status,
+              notes,
+            });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ImportTestCasesModal({ 
+  testCases, 
+  onImport, 
+  onClose 
+}: { 
+  testCases: ManualTestCase[]; 
+  onImport: (ids: number[]) => void; 
+  onClose: () => void; 
+}) {
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filteredTestCases = testCases.filter(tc =>
+    tc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (tc.description && tc.description.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === filteredTestCases.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredTestCases.map(tc => tc.id));
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-4">
+        <Input
+          placeholder="Search test cases..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+        <Button variant="outline" onClick={handleSelectAll}>
+          {selectedIds.length === filteredTestCases.length ? 'Deselect All' : 'Select All'}
+        </Button>
+      </div>
+
+      <ScrollArea className="h-[400px] border rounded">
+        <div className="p-4 space-y-2">
+          {filteredTestCases.map((testCase) => (
+            <div key={testCase.id} className="flex items-center space-x-3 p-2 rounded hover:bg-muted">
+              <Checkbox
+                checked={selectedIds.includes(testCase.id)}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    setSelectedIds([...selectedIds, testCase.id]);
+                  } else {
+                    setSelectedIds(selectedIds.filter(id => id !== testCase.id));
+                  }
+                }}
+              />
+              <div className="flex-1">
+                <p className="font-medium">{testCase.title}</p>
+                {testCase.description && (
+                  <p className="text-sm text-muted-foreground">{testCase.description}</p>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-
-        {/* Test Run Detail Modal */}
-        {selectedRun && (
-          <Dialog open={!!selectedRun} onOpenChange={() => setSelectedRun(null)}>
-            <DialogContent className="max-w-4xl">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Play className="h-5 w-5" />
-                  {selectedRun.name}
-                  {getStatusBadge(selectedRun.status)}
-                </DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Assigned to:</span>
-                    <span className="ml-2">{selectedRun.assignedTo || "Unassigned"}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Created:</span>
-                    <span className="ml-2">{new Date(selectedRun.createdAt).toLocaleString()}</span>
-                  </div>
-                </div>
-                
-                {/* Execution List */}
-                <div>
-                  <h4 className="font-medium mb-2">Test Executions</h4>
-                  {!executions || executions.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No test executions found for this run.</p>
-                  ) : (
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
-                      {executions
-                        .filter(exec => exec.testRunId === selectedRun.id)
-                        .map((execution) => {
-                          const testCase = testCases?.find(tc => tc.id === execution.testCaseId);
-                          return (
-                            <div key={execution.id} className="flex items-center justify-between p-2 border border-border rounded">
-                              <div>
-                                <p className="font-medium text-sm">{testCase?.title || "Unknown Test Case"}</p>
-                                {execution.notes && (
-                                  <p className="text-xs text-muted-foreground">{execution.notes}</p>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {getExecutionStatusBadge(execution.status)}
-                                <div className="flex gap-1">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-6 w-6 p-0 text-green-600 hover:text-green-700"
-                                    onClick={() => updateExecutionMutation.mutate({
-                                      id: execution.id,
-                                      updates: { status: "passed", executedAt: new Date() }
-                                    })}
-                                  >
-                                    <Check className="h-3 w-3" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
-                                    onClick={() => updateExecutionMutation.mutate({
-                                      id: execution.id,
-                                      updates: { status: "failed", executedAt: new Date() }
-                                    })}
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  )}
-                </div>
               </div>
-            </DialogContent>
-          </Dialog>
-        )}
+              <Badge variant="outline">{testCase.priority}</Badge>
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
+
+      <div className="flex justify-between items-center">
+        <p className="text-sm text-muted-foreground">
+          {selectedIds.length} test case(s) selected
+        </p>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={() => onImport(selectedIds)}
+            disabled={selectedIds.length === 0}
+          >
+            Import Selected
+          </Button>
+        </div>
       </div>
     </div>
+  );
+}
+
+function TestExecutionModal({
+  execution,
+  testCase,
+  isOpen,
+  onClose,
+  onUpdateStatus,
+}: {
+  execution: ManualTestExecution;
+  testCase: ManualTestCase;
+  isOpen: boolean;
+  onClose: () => void;
+  onUpdateStatus: (status: string, notes?: string) => void;
+}) {
+  const [status, setStatus] = useState(execution.status);
+  const [notes, setNotes] = useState(execution.notes || '');
+
+  const handleSave = () => {
+    onUpdateStatus(status, notes);
+    onClose();
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[80vh]">
+        <DialogHeader>
+          <DialogTitle>Execute Test Case: {testCase.title}</DialogTitle>
+        </DialogHeader>
+        
+        <ScrollArea className="max-h-[60vh]">
+          <div className="space-y-6 pr-4">
+            <div>
+              <h4 className="font-medium mb-2">Test Steps</h4>
+              <div className="p-4 bg-muted/30 rounded-lg">
+                <pre className="text-sm whitespace-pre-wrap">{testCase.content}</pre>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="font-medium mb-2">Status</h4>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusColumns.map((column) => {
+                    const IconComponent = column.icon;
+                    return (
+                      <SelectItem key={column.status} value={column.status}>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${column.color}`} />
+                          <IconComponent className="h-4 w-4" />
+                          {column.title}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <h4 className="font-medium mb-2">Execution Notes</h4>
+              <Textarea
+                placeholder="Add notes about the test execution..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="min-h-[100px]"
+              />
+            </div>
+          </div>
+        </ScrollArea>
+
+        <div className="flex justify-end gap-2 pt-4 border-t">
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave}>
+            Save Results
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

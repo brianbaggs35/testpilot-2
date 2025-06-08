@@ -210,6 +210,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test Suites
+  app.get("/api/test-suites", async (req, res) => {
+    try {
+      const testSuites = await storage.getAllTestSuites();
+      res.json(testSuites);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch test suites" });
+    }
+  });
+
+  app.post("/api/test-suites", async (req, res) => {
+    try {
+      const testSuite = await storage.createTestSuite(req.body);
+      res.status(201).json(testSuite);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create test suite" });
+    }
+  });
+
+  app.get("/api/test-suites/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const testSuite = await storage.getTestSuite(id);
+      if (!testSuite) {
+        return res.status(404).json({ message: "Test suite not found" });
+      }
+      res.json(testSuite);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch test suite" });
+    }
+  });
+
+  app.patch("/api/test-suites/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const testSuite = await storage.updateTestSuite(id, req.body);
+      if (!testSuite) {
+        return res.status(404).json({ message: "Test suite not found" });
+      }
+      res.json(testSuite);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update test suite" });
+    }
+  });
+
+  app.delete("/api/test-suites/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteTestSuite(id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Test suite not found" });
+      }
+      res.json({ message: "Test suite deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete test suite" });
+    }
+  });
+
   // Manual Test Cases
   app.get("/api/manual-test-cases", async (_req, res) => {
     try {

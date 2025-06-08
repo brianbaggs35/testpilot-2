@@ -212,6 +212,10 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getManualTestCasesByTestSuiteId(testSuiteId: number): Promise<ManualTestCase[]> {
+    return Array.from(this.manualTestCases.values()).filter(tc => tc.testSuiteId === testSuiteId);
+  }
+
   async updateManualTestCase(id: number, updates: Partial<ManualTestCase>): Promise<ManualTestCase | undefined> {
     const testCase = this.manualTestCases.get(id);
     if (!testCase) return undefined;

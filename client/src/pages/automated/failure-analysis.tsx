@@ -41,8 +41,8 @@ interface KanbanColumn {
 }
 
 const defaultColumns: KanbanColumn[] = [
-  { id: 'new', title: 'New Failures', status: 'new', color: 'bg-red-500', icon: AlertTriangle },
-  { id: 'investigating', title: 'Investigating', status: 'investigating', color: 'bg-yellow-500', icon: Clock },
+  { id: 'new_failures', title: 'New Failures', status: 'new_failures', color: 'bg-red-500', icon: AlertTriangle },
+  { id: 'investigating', title: 'Investigating', status: 'investigating', color: 'bg-yellow-500', icon: Search },
   { id: 'in_progress', title: 'In Progress', status: 'in_progress', color: 'bg-blue-500', icon: Edit },
   { id: 'resolved', title: 'Resolved', status: 'resolved', color: 'bg-green-500', icon: CheckCircle },
 ];

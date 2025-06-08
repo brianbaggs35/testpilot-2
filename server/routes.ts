@@ -130,11 +130,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           attachments: tc.attachments || null
         });
 
-        // Create failure analysis for failed tests
-        if (tc.status === 'failed') {
+        // Create failure analysis for failed and flaky tests
+        if (tc.status === 'failed' || tc.status === 'flaky') {
           await storage.createFailureAnalysis({
             testCaseId: testCase.id,
-            status: 'new',
+            status: 'new_failures',
+            assignedTo: null,
+            resolution: null,
           });
         }
       }
@@ -319,6 +321,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "Manual test case deleted successfully" });
     } catch (error) {
       res.status(500).json({ message: "Failed to delete manual test case" });
+    }
+  });
+
+  // Manual Test Executions
+  app.get("/api/manual-test-executions", async (req, res) => {
+    try {
+      const testRunId = req.query.testRunId ? parseInt(req.query.testRunId as string) : undefined;
+      let executions;
+      
+      if (testRunId) {
+        executions = await storage.getManualTestExecutionsByRunId(testRunId);
+      } else {
+        // For now, return empty array if no testRunId specified
+        executions = [];
+      }
+      
+      res.json(executions);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch manual test executions" });
+    }
+  });
+
+  app.post("/api/manual-test-executions", async (req, res) => {
+    try {
+      const execution = await storage.createManualTestExecution(req.body);
+      res.status(201).json(execution);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create manual test execution" });
+    }
+  });
+
+  app.patch("/api/manual-test-executions/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const execution = await storage.updateManualTestExecution(id, req.body);
+      if (!execution) {
+        return res.status(404).json({ message: "Manual test execution not found" });
+      }
+      res.json(execution);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update manual test execution" });
     }
   });
 

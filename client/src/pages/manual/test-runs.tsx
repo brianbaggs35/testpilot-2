@@ -73,7 +73,7 @@ function KanbanItem({ execution, testCase, onClick }: KanbanItemProps) {
   };
 
   const getStatusInfo = () => {
-    return statusColumns.find(s => s.value === execution.status) || statusColumns[0];
+    return statusColumns.find(s => s.status === execution.status) || statusColumns[0];
   };
 
   return (
@@ -214,7 +214,7 @@ export default function TestRuns() {
   });
 
   const { data: executions = [] } = useQuery<ManualTestExecution[]>({
-    queryKey: ['/api/manual-test-executions'],
+    queryKey: ['/api/manual-test-executions', selectedRun?.id],
     enabled: !!selectedRun,
   });
 

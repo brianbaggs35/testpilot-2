@@ -208,10 +208,15 @@ export default function FailureAnalysisPage() {
 
   const updateAnalysisMutation = useMutation({
     mutationFn: async ({ id, status, notes }: { id: number; status: string; notes?: string }) => {
-      return apiRequest(`/api/failure-analysis/${id}`, 'PATCH', { status, resolution: notes });
+      return apiRequest(`/api/failure-analysis/${id}`, 'PATCH', { 
+        status, 
+        resolution: notes,
+        updatedAt: new Date().toISOString()
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/failure-analysis'] });
+      setIsModalOpen(false);
     },
   });
 

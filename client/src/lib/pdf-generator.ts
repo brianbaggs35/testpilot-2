@@ -9,6 +9,18 @@ declare module 'jspdf' {
   }
 }
 
+// Professional color palette
+const colors = {
+  primary: '#2563eb',
+  secondary: '#64748b',
+  success: '#059669',
+  warning: '#d97706',
+  danger: '#dc2626',
+  gray: '#6b7280',
+  lightGray: '#f8fafc',
+  darkGray: '#374151',
+};
+
 interface AutomatedReportOptions {
   testRuns: TestRun[];
   testCases: TestCase[];

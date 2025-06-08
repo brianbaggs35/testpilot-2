@@ -1,6 +1,7 @@
 import { 
   TestRun, InsertTestRun,
   TestCase, InsertTestCase,
+  TestSuite, InsertTestSuite,
   ManualTestCase, InsertManualTestCase,
   ManualTestRun, InsertManualTestRun,
   ManualTestExecution, InsertManualTestExecution,
@@ -20,10 +21,18 @@ export interface IStorage {
   getTestCasesByRunId(testRunId: number): Promise<TestCase[]>;
   getAllTestCases(): Promise<TestCase[]>;
 
+  // Test Suites
+  createTestSuite(testSuite: InsertTestSuite): Promise<TestSuite>;
+  getTestSuite(id: number): Promise<TestSuite | undefined>;
+  getAllTestSuites(): Promise<TestSuite[]>;
+  updateTestSuite(id: number, updates: Partial<TestSuite>): Promise<TestSuite | undefined>;
+  deleteTestSuite(id: number): Promise<boolean>;
+
   // Manual Test Cases
   createManualTestCase(testCase: InsertManualTestCase): Promise<ManualTestCase>;
   getManualTestCase(id: number): Promise<ManualTestCase | undefined>;
   getAllManualTestCases(): Promise<ManualTestCase[]>;
+  getManualTestCasesByTestSuiteId(testSuiteId: number): Promise<ManualTestCase[]>;
   updateManualTestCase(id: number, updates: Partial<ManualTestCase>): Promise<ManualTestCase | undefined>;
   deleteManualTestCase(id: number): Promise<boolean>;
 
@@ -49,12 +58,14 @@ export interface IStorage {
 export class MemStorage implements IStorage {
   private testRuns: Map<number, TestRun>;
   private testCases: Map<number, TestCase>;
+  private testSuites: Map<number, TestSuite>;
   private manualTestCases: Map<number, ManualTestCase>;
   private manualTestRuns: Map<number, ManualTestRun>;
   private manualTestExecutions: Map<number, ManualTestExecution>;
   private failureAnalyses: Map<number, FailureAnalysis>;
   private currentTestRunId: number;
   private currentTestCaseId: number;
+  private currentTestSuiteId: number;
   private currentManualTestCaseId: number;
   private currentManualTestRunId: number;
   private currentManualTestExecutionId: number;
@@ -63,12 +74,14 @@ export class MemStorage implements IStorage {
   constructor() {
     this.testRuns = new Map();
     this.testCases = new Map();
+    this.testSuites = new Map();
     this.manualTestCases = new Map();
     this.manualTestRuns = new Map();
     this.manualTestExecutions = new Map();
     this.failureAnalyses = new Map();
     this.currentTestRunId = 1;
     this.currentTestCaseId = 1;
+    this.currentTestSuiteId = 1;
     this.currentManualTestCaseId = 1;
     this.currentManualTestRunId = 1;
     this.currentManualTestExecutionId = 1;
@@ -141,6 +154,40 @@ export class MemStorage implements IStorage {
 
   async getAllTestCases(): Promise<TestCase[]> {
     return Array.from(this.testCases.values());
+  }
+
+  // Test Suites
+  async createTestSuite(insertTestSuite: InsertTestSuite): Promise<TestSuite> {
+    const id = this.currentTestSuiteId++;
+    const testSuite: TestSuite = {
+      id,
+      ...insertTestSuite,
+      createdAt: new Date(),
+    };
+    this.testSuites.set(id, testSuite);
+    return testSuite;
+  }
+
+  async getTestSuite(id: number): Promise<TestSuite | undefined> {
+    return this.testSuites.get(id);
+  }
+
+  async getAllTestSuites(): Promise<TestSuite[]> {
+    return Array.from(this.testSuites.values());
+  }
+
+  async updateTestSuite(id: number, updates: Partial<TestSuite>): Promise<TestSuite | undefined> {
+    const testSuite = this.testSuites.get(id);
+    if (testSuite) {
+      const updated = { ...testSuite, ...updates };
+      this.testSuites.set(id, updated);
+      return updated;
+    }
+    return undefined;
+  }
+
+  async deleteTestSuite(id: number): Promise<boolean> {
+    return this.testSuites.delete(id);
   }
 
   // Manual Test Cases

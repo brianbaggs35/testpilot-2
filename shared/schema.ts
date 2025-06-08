@@ -85,6 +85,11 @@ export const insertTestCaseSchema = createInsertSchema(testCases).omit({
   id: true,
 });
 
+export const insertTestSuiteSchema = createInsertSchema(testSuites).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertManualTestCaseSchema = createInsertSchema(manualTestCases).omit({
   id: true,
   createdAt: true,
@@ -111,6 +116,9 @@ export type InsertTestRun = z.infer<typeof insertTestRunSchema>;
 
 export type TestCase = typeof testCases.$inferSelect;
 export type InsertTestCase = z.infer<typeof insertTestCaseSchema>;
+
+export type TestSuite = typeof testSuites.$inferSelect;
+export type InsertTestSuite = z.infer<typeof insertTestSuiteSchema>;
 
 export type ManualTestCase = typeof manualTestCases.$inferSelect;
 export type InsertManualTestCase = z.infer<typeof insertManualTestCaseSchema>;

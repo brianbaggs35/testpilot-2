@@ -284,6 +284,7 @@ export function EnhancedPDFPreview({
                     <embed
                       src={pdfDataUrl}
                       type="application/pdf"
+                      title="PDF Preview"
                       width="794"
                       height="1123"
                       className="border-0 rounded-lg"

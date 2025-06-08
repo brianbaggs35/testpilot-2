@@ -105,40 +105,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Process JUnit XML
+  // Process JUnit XML in batches
   app.post("/api/junit/process/:id", async (req, res) => {
     try {
       const testRunId = parseInt(req.params.id);
       const testRun = await storage.getTestRun(testRunId);
       
-      if (!testRun || !testRun.xmlContent) {
-        return res.status(404).json({ message: "Test run or XML content not found" });
+      if (!testRun) {
+        return res.status(404).json({ message: "Test run not found" });
       }
 
-      // Parse XML and create test cases (simplified parsing)
       const testCases = req.body.testCases || [];
       
-      let totalTests = 0;
-      let passedTests = 0;
-      let failedTests = 0;
-      let skippedTests = 0;
-
+      // Process test cases in batch
       for (const tc of testCases) {
         const testCase = await storage.createTestCase({
           testRunId: testRun.id,
           name: tc.name,
-          className: tc.className,
+          className: tc.className || null,
           status: tc.status,
-          duration: tc.duration,
-          errorMessage: tc.errorMessage,
-          stackTrace: tc.stackTrace,
-          attachments: tc.attachments || []
+          duration: tc.duration || null,
+          errorMessage: tc.errorMessage || null,
+          stackTrace: tc.stackTrace || null,
+          attachments: tc.attachments || null
         });
-
-        totalTests++;
-        if (tc.status === 'passed') passedTests++;
-        else if (tc.status === 'failed') failedTests++;
-        else if (tc.status === 'skipped') skippedTests++;
 
         // Create failure analysis for failed tests
         if (tc.status === 'failed') {
@@ -149,18 +139,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Update test run with results
+      // Get updated counts
+      const allTestCases = await storage.getTestCasesByRunId(testRunId);
+      const totalTests = allTestCases.length;
+      const passedTests = allTestCases.filter(tc => tc.status === 'passed').length;
+      const failedTests = allTestCases.filter(tc => tc.status === 'failed').length;
+      const skippedTests = allTestCases.filter(tc => tc.status === 'skipped').length;
+
+      // Update test run with current results
       await storage.updateTestRun(testRunId, {
-        status: 'completed',
+        status: testCases.length < 100 ? 'completed' : 'running', // Mark complete only if small batch
         totalTests,
         passedTests,
         failedTests,
         skippedTests
       });
 
-      res.json({ message: "XML processed successfully" });
+      res.json({ 
+        message: "Batch processed successfully",
+        processed: testCases.length,
+        totalProcessed: totalTests
+      });
     } catch (error) {
-      res.status(500).json({ message: "Failed to process XML" });
+      console.error('Error processing XML batch:', error);
+      res.status(500).json({ message: "Failed to process XML batch" });
     }
   });
 

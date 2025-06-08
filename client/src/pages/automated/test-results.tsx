@@ -252,7 +252,11 @@ export default function TestResults() {
                   {filteredTestCases.map((testCase) => {
                     const testRun = testRuns?.find(run => run.id === testCase.testRunId);
                     return (
-                      <TableRow key={testCase.id}>
+                      <TableRow 
+                        key={testCase.id} 
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleRowClick(testCase)}
+                      >
                         <TableCell className="font-medium">{testCase.name}</TableCell>
                         <TableCell className="font-mono text-sm">{testCase.className || "N/A"}</TableCell>
                         <TableCell>{getStatusBadge(testCase.status)}</TableCell>
@@ -262,7 +266,10 @@ export default function TestResults() {
                           <Button 
                             variant="ghost" 
                             size="sm"
-                            onClick={() => handleViewDetails(testCase)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewDetails(testCase);
+                            }}
                           >
                             <Eye className="h-4 w-4 mr-1" />
                             Details

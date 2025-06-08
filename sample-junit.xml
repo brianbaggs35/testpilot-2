@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Test Results" tests="15" failures="3" errors="1" time="45.234" timestamp="2024-01-15T10:30:00">
+  <testsuite name="UserAuthenticationTests" tests="8" failures="2" errors="0" time="25.123" timestamp="2024-01-15T10:30:00">
+    <testcase name="testValidLogin" classname="com.example.auth.UserAuthTest" time="1.234">
+    </testcase>
+    <testcase name="testInvalidPassword" classname="com.example.auth.UserAuthTest" time="0.567">
+    </testcase>
+    <testcase name="testMissingUsername" classname="com.example.auth.UserAuthTest" time="0.445">
+      <failure message="Username field is required" type="ValidationException">
+        Expected username to be provided but was null
+        at com.example.auth.UserAuthTest.testMissingUsername(UserAuthTest.java:45)
+        at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+      </failure>
+    </testcase>
+    <testcase name="testExpiredToken" classname="com.example.auth.UserAuthTest" time="2.111">
+    </testcase>
+    <testcase name="testTokenRefresh" classname="com.example.auth.UserAuthTest" time="3.456">
+    </testcase>
+    <testcase name="testLogout" classname="com.example.auth.UserAuthTest" time="0.789">
+    </testcase>
+    <testcase name="testPasswordReset" classname="com.example.auth.UserAuthTest" time="5.234">
+      <failure message="Email service unavailable" type="ServiceException">
+        Failed to send password reset email
+        at com.example.auth.EmailService.sendResetEmail(EmailService.java:67)
+        at com.example.auth.UserAuthTest.testPasswordReset(UserAuthTest.java:89)
+      </failure>
+    </testcase>
+    <testcase name="testAccountLockout" classname="com.example.auth.UserAuthTest" time="1.287">
+    </testcase>
+  </testsuite>
+  
+  <testsuite name="DatabaseConnectionTests" tests="4" failures="0" errors="1" time="12.456" timestamp="2024-01-15T10:32:00">
+    <testcase name="testDatabaseConnection" classname="com.example.db.ConnectionTest" time="2.123">
+    </testcase>
+    <testcase name="testQueryExecution" classname="com.example.db.ConnectionTest" time="3.456">
+    </testcase>
+    <testcase name="testTransactionRollback" classname="com.example.db.ConnectionTest" time="4.567">
+      <error message="Connection timeout" type="SQLException">
+        java.sql.SQLException: Connection timeout after 30 seconds
+        at com.example.db.ConnectionPool.getConnection(ConnectionPool.java:123)
+        at com.example.db.ConnectionTest.testTransactionRollback(ConnectionTest.java:34)
+      </error>
+    </testcase>
+    <testcase name="testConnectionPooling" classname="com.example.db.ConnectionTest" time="2.310">
+    </testcase>
+  </testsuite>
+  
+  <testsuite name="APIEndpointTests" tests="3" failures="1" errors="0" time="7.655" timestamp="2024-01-15T10:35:00">
+    <testcase name="testGetUsers" classname="com.example.api.UserControllerTest" time="1.234">
+    </testcase>
+    <testcase name="testCreateUser" classname="com.example.api.UserControllerTest" time="2.567">
+      <failure message="Validation failed for email field" type="ValidationException">
+        Invalid email format provided: not-an-email
+        at com.example.api.UserController.createUser(UserController.java:56)
+        at com.example.api.UserControllerTest.testCreateUser(UserControllerTest.java:78)
+      </failure>
+    </testcase>
+    <testcase name="testUpdateUser" classname="com.example.api.UserControllerTest" time="3.854">
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -5,34 +5,88 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileText, CheckCircle, AlertCircle } from "lucide-react";
+import { Upload, FileText, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { parseJUnitXML, validateJUnitXML, getTestSummary } from "@/lib/xml-parser";
+import { useLocation } from "wouter";
 
 export default function JUnitUpload() {
   const [file, setFile] = useState<File | null>(null);
   const [testRunName, setTestRunName] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [parsePreview, setParsePreview] = useState<any>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
 
   const uploadMutation = useMutation({
-    mutationFn: async (formData: FormData) => {
-      const response = await apiRequest("POST", "/api/junit/upload", formData);
-      return response.json();
+    mutationFn: async ({ xmlContent, testRunName }: { xmlContent: string; testRunName: string }) => {
+      // Parse XML first
+      if (!validateJUnitXML(xmlContent)) {
+        throw new Error("Invalid JUnit XML format");
+      }
+
+      const parsedXML = parseJUnitXML(xmlContent);
+      const summary = getTestSummary(parsedXML);
+
+      // Create test run
+      const testRunResponse = await apiRequest("POST", "/api/test-runs", {
+        name: testRunName,
+        type: 'automated',
+        status: 'running',
+        totalTests: summary.totalTests,
+        passedTests: summary.passedTests,
+        failedTests: summary.failedTests,
+        skippedTests: summary.skippedTests,
+        xmlContent
+      });
+
+      const testRun = await testRunResponse.json();
+
+      // Process test cases in batches for large files
+      const testCases = [];
+      for (const suite of parsedXML.testSuites) {
+        for (const testCase of suite.testCases) {
+          testCases.push({
+            testRunId: testRun.id,
+            name: testCase.name,
+            className: testCase.className,
+            status: testCase.status,
+            duration: testCase.duration,
+            errorMessage: testCase.errorMessage,
+            stackTrace: testCase.stackTrace,
+            attachments: testCase.attachments || []
+          });
+        }
+      }
+
+      // Process in batches of 100 for performance
+      const batchSize = 100;
+      for (let i = 0; i < testCases.length; i += batchSize) {
+        const batch = testCases.slice(i, i + batchSize);
+        await apiRequest("POST", `/api/junit/process/${testRun.id}`, { testCases: batch });
+        setUploadProgress(Math.min(90, (i / testCases.length) * 80 + 20));
+      }
+
+      return { testRun, summary };
     },
     onSuccess: (data) => {
       toast({
         title: "Upload Successful",
-        description: "JUnit XML file has been uploaded successfully.",
+        description: `Processed ${data.summary.totalTests} test cases successfully.`,
       });
       setFile(null);
       setTestRunName("");
+      setParsePreview(null);
       setUploadProgress(100);
       queryClient.invalidateQueries({ queryKey: ["/api/test-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/test-cases"] });
       
-      // Process the XML
-      processXML(data.testRunId);
+      // Navigate to test results
+      setTimeout(() => {
+        setLocation("/automated/test-results");
+      }, 1500);
     },
     onError: (error: any) => {
       toast({
@@ -44,58 +98,46 @@ export default function JUnitUpload() {
     },
   });
 
-  const processXMLMutation = useMutation({
-    mutationFn: async ({ testRunId, testCases }: { testRunId: number; testCases: any[] }) => {
-      const response = await apiRequest("POST", `/api/junit/process/${testRunId}`, { testCases });
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: "Processing Complete",
-        description: "JUnit XML has been processed and test results are available.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/test-runs"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/test-cases"] });
-    },
-  });
-
-  const processXML = async (testRunId: number) => {
-    if (!file) return;
-
-    const text = await file.text();
-    const testCases = parseJUnitXML(text);
-    processXMLMutation.mutate({ testRunId, testCases });
-  };
-
-  const parseJUnitXML = (xmlText: string) => {
-    // Simple XML parsing (in a real app, use a proper XML parser)
-    const testCases = [];
-    const regex = /<testcase[^>]*name="([^"]*)"[^>]*classname="([^"]*)"[^>]*time="([^"]*)"[^>]*>/g;
-    let match;
-
-    while ((match = regex.exec(xmlText)) !== null) {
-      const [, name, className, time] = match;
-      const status = xmlText.includes(`<failure`) ? 'failed' : 'passed';
-      
-      testCases.push({
-        name,
-        className,
-        duration: Math.round(parseFloat(time) * 1000), // Convert to milliseconds
-        status,
-        errorMessage: status === 'failed' ? 'Test failed' : null,
-        stackTrace: status === 'failed' ? 'Stack trace would be extracted from XML' : null,
-      });
-    }
-
-    return testCases;
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (selectedFile) {
       if (selectedFile.type === "text/xml" || selectedFile.name.endsWith(".xml")) {
+        // Check file size (50MB limit)
+        if (selectedFile.size > 50 * 1024 * 1024) {
+          toast({
+            title: "File Too Large",
+            description: "Please select a file smaller than 50MB.",
+            variant: "destructive",
+          });
+          return;
+        }
+
         setFile(selectedFile);
         setUploadProgress(0);
+
+        // Preview the XML content
+        try {
+          const text = await selectedFile.text();
+          if (validateJUnitXML(text)) {
+            const parsedXML = parseJUnitXML(text);
+            const summary = getTestSummary(parsedXML);
+            setParsePreview(summary);
+          } else {
+            setParsePreview(null);
+            toast({
+              title: "Invalid XML Format",
+              description: "The selected file is not a valid JUnit XML format.",
+              variant: "destructive",
+            });
+          }
+        } catch (error) {
+          setParsePreview(null);
+          toast({
+            title: "File Read Error",
+            description: "Unable to read the selected XML file.",
+            variant: "destructive",
+          });
+        }
       } else {
         toast({
           title: "Invalid File Type",
@@ -106,7 +148,7 @@ export default function JUnitUpload() {
     }
   };
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (!file) {
       toast({
         title: "No File Selected",
@@ -116,15 +158,23 @@ export default function JUnitUpload() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("xml", file);
-    formData.append("name", testRunName || file.name.replace(".xml", ""));
-
-    setUploadProgress(50);
-    uploadMutation.mutate(formData);
+    try {
+      setUploadProgress(10);
+      const xmlContent = await file.text();
+      const runName = testRunName || file.name.replace(".xml", "");
+      
+      uploadMutation.mutate({ xmlContent, testRunName: runName });
+    } catch (error) {
+      toast({
+        title: "File Read Error",
+        description: "Unable to read the XML file content.",
+        variant: "destructive",
+      });
+      setUploadProgress(0);
+    }
   };
 
-  const isUploading = uploadMutation.isPending || processXMLMutation.isPending;
+  const isUploading = uploadMutation.isPending;
 
   return (
     <div className="py-6">
@@ -178,6 +228,29 @@ export default function JUnitUpload() {
                       ({(file.size / 1024).toFixed(1)} KB)
                     </span>
                   </div>
+                  {parsePreview && (
+                    <div className="mt-3 p-3 bg-background rounded border">
+                      <h4 className="text-sm font-medium mb-2">XML Preview:</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                        <div>
+                          <span className="text-muted-foreground">Total Tests:</span>
+                          <span className="ml-1 font-medium">{parsePreview.totalTests}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Passed:</span>
+                          <span className="ml-1 font-medium text-green-600">{parsePreview.passedTests}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Failed:</span>
+                          <span className="ml-1 font-medium text-red-600">{parsePreview.failedTests}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Pass Rate:</span>
+                          <span className="ml-1 font-medium">{parsePreview.passRate}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -28,6 +28,14 @@ export const testCases = pgTable("test_cases", {
   attachments: jsonb("attachments").$type<string[]>().default([]),
 });
 
+export const testSuites = pgTable("test_suites", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  parentId: integer("parent_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const manualTestCases = pgTable("manual_test_cases", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -36,6 +44,7 @@ export const manualTestCases = pgTable("manual_test_cases", {
   priority: text("priority").notNull().default('medium'), // 'low' | 'medium' | 'high' | 'critical'
   category: text("category"),
   tags: jsonb("tags").$type<string[]>().default([]),
+  testSuiteId: integer("test_suite_id").references(() => testSuites.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

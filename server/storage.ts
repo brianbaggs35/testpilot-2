@@ -161,8 +161,10 @@ export class MemStorage implements IStorage {
     const id = this.currentTestSuiteId++;
     const testSuite: TestSuite = {
       id,
-      ...insertTestSuite,
+      name: insertTestSuite.name,
       createdAt: new Date(),
+      description: insertTestSuite.description || null,
+      parentId: insertTestSuite.parentId || null,
     };
     this.testSuites.set(id, testSuite);
     return testSuite;

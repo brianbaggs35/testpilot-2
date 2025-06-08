@@ -274,20 +274,23 @@ export function EnhancedPDFPreview({
               ) : pdfDataUrl ? (
                 <div className="flex justify-center p-4">
                   <div 
-                    className="shadow-2xl bg-white rounded-lg overflow-hidden"
+                    className="shadow-2xl bg-white rounded-lg overflow-hidden border border-gray-300"
                     style={{ 
                       transform: `scale(${zoom})`,
                       transformOrigin: 'top center',
                       transition: 'transform 0.2s ease-in-out'
                     }}
                   >
-                    <iframe
+                    <embed
                       src={pdfDataUrl}
-                      className="w-[794px] h-[1123px] border-0"
-                      title="PDF Preview"
+                      type="application/pdf"
+                      width="794"
+                      height="1123"
+                      className="border-0 rounded-lg"
                       style={{
-                        width: '794px', // A4 width in pixels at 96 DPI
-                        height: '1123px', // A4 height in pixels at 96 DPI
+                        width: '794px',
+                        height: '1123px',
+                        display: 'block'
                       }}
                     />
                   </div>

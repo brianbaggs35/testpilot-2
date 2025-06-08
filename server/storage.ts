@@ -79,8 +79,16 @@ export class MemStorage implements IStorage {
   async createTestRun(insertTestRun: InsertTestRun): Promise<TestRun> {
     const id = this.currentTestRunId++;
     const testRun: TestRun = {
-      ...insertTestRun,
       id,
+      type: insertTestRun.type,
+      name: insertTestRun.name,
+      status: insertTestRun.status,
+      totalTests: insertTestRun.totalTests || 0,
+      passedTests: insertTestRun.passedTests || 0,
+      failedTests: insertTestRun.failedTests || 0,
+      skippedTests: insertTestRun.skippedTests || 0,
+      duration: insertTestRun.duration || null,
+      xmlContent: insertTestRun.xmlContent || null,
       createdAt: new Date(),
     };
     this.testRuns.set(id, testRun);
@@ -109,8 +117,15 @@ export class MemStorage implements IStorage {
   async createTestCase(insertTestCase: InsertTestCase): Promise<TestCase> {
     const id = this.currentTestCaseId++;
     const testCase: TestCase = {
-      ...insertTestCase,
       id,
+      name: insertTestCase.name,
+      className: insertTestCase.className || null,
+      status: insertTestCase.status,
+      duration: insertTestCase.duration || null,
+      testRunId: insertTestCase.testRunId || null,
+      errorMessage: insertTestCase.errorMessage || null,
+      stackTrace: insertTestCase.stackTrace || null,
+      attachments: insertTestCase.attachments || null,
     };
     this.testCases.set(id, testCase);
     return testCase;

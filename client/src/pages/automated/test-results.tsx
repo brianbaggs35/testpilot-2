@@ -6,9 +6,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { StackTraceModal } from "@/components/modals/stack-trace-modal";
-import { Search, Filter, Download, Eye } from "lucide-react";
+import { Search, Filter, Download, Eye, FileText, CheckCircle, XCircle, AlertCircle, Minus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { TestCase, TestRun } from "@shared/schema";
+import { generateAutomatedTestReport } from "@/lib/pdf-generator";
+import { useToast } from "@/hooks/use-toast";
 
 export default function TestResults() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -16,6 +18,7 @@ export default function TestResults() {
   const [selectedTestRun, setSelectedTestRun] = useState<string>("all");
   const [selectedTestCase, setSelectedTestCase] = useState<TestCase | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { toast } = useToast();
 
   const { data: testRuns } = useQuery<TestRun[]>({
     queryKey: ["/api/test-runs"],
@@ -33,6 +36,18 @@ export default function TestResults() {
     
     return matchesSearch && matchesStatus && matchesTestRun;
   }) || [];
+
+  const getTestCaseStats = () => {
+    const total = filteredTestCases.length;
+    const passed = filteredTestCases.filter(tc => tc.status === 'passed').length;
+    const failed = filteredTestCases.filter(tc => tc.status === 'failed').length;
+    const skipped = filteredTestCases.filter(tc => tc.status === 'skipped').length;
+    const passRate = total > 0 ? ((passed / total) * 100).toFixed(1) : '0';
+    
+    return { total, passed, failed, skipped, passRate };
+  };
+
+  const stats = getTestCaseStats();
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -54,6 +69,35 @@ export default function TestResults() {
     setIsModalOpen(true);
   };
 
+  const handleRowClick = (testCase: TestCase) => {
+    setSelectedTestCase(testCase);
+    setIsModalOpen(true);
+  };
+
+  const handleExportPDF = async () => {
+    try {
+      await generateAutomatedTestReport({
+        testRuns: testRuns || [],
+        testCases: filteredTestCases,
+        reportType: 'detailed',
+        includeCharts: true,
+        includeDetails: true,
+        dateRange: 'all'
+      });
+      
+      toast({
+        title: "Export Successful",
+        description: "PDF report has been downloaded successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: "Failed to generate PDF report.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const formatDuration = (duration: number | null) => {
     if (!duration) return "N/A";
     if (duration < 1000) return `${duration}ms`;
@@ -66,6 +110,57 @@ export default function TestResults() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-foreground">Test Results</h1>
           <p className="text-muted-foreground">View and analyze automated test results</p>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Total Tests</p>
+                  <p className="text-2xl font-bold">{stats.total}</p>
+                </div>
+                <FileText className="h-8 w-8 text-muted-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Passed</p>
+                  <p className="text-2xl font-bold text-green-600">{stats.passed}</p>
+                </div>
+                <CheckCircle className="h-8 w-8 text-green-500" />
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Failed</p>
+                  <p className="text-2xl font-bold text-red-600">{stats.failed}</p>
+                </div>
+                <XCircle className="h-8 w-8 text-red-500" />
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Pass Rate</p>
+                  <p className="text-2xl font-bold">{stats.passRate}%</p>
+                </div>
+                <AlertCircle className="h-8 w-8 text-blue-500" />
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Filters */}
@@ -115,9 +210,9 @@ export default function TestResults() {
                 </SelectContent>
               </Select>
 
-              <Button variant="outline">
+              <Button variant="outline" onClick={handleExportPDF}>
                 <Download className="h-4 w-4 mr-2" />
-                Export
+                Export PDF
               </Button>
             </div>
           </CardContent>
